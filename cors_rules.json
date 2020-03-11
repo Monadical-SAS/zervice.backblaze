@@ -1,0 +1,27 @@
+[
+  {
+    "corsRuleName": "zervice-backblaze-backend",
+    "allowedOrigins": [
+      "http://localhost:8085",
+      "https://backblaze.zervice.io"
+    ],
+    "allowedHeaders": [
+      "*"
+    ],
+    "allowedOperations": [
+      "b2_download_file_by_id",
+      "b2_download_file_by_name",
+      "b2_upload_file",
+      "b2_upload_part"
+    ],
+    "exposeHeaders": [
+      "Content-Length",
+      "Authorization",
+      "X-Bz-File-Name",
+      "X-Bz-Content-Sha1",
+      "X-Bz-Info-b2-cache-control",
+      "X-Bz-Info-original-name"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

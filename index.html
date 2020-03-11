@@ -1,0 +1,168 @@
+<html>
+    <head>
+        <title>Zervice.BackBlaze | B2 DropBox</title>
+
+        <style type="text/css">
+            h1, h2 {
+                font-family: 'Gill Sans', sans-serif;
+                font-weight: 200;
+            }
+            input[type=file] {
+                background-color: #dde6f7;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 4px 4px 4px rgba(0,0,0,0.02);
+                font-size: 14px;
+            }
+            .file-row {
+                display: inline-block;
+                width: 23%;
+                border-radius: 8px;
+                background: #f4f4fa;
+                box-shadow: 4px 4px 4px rgba(0,0,0,0.02);
+                margin: 1%;
+                overflow: hidden;
+                color: #333;
+                text-decoration: none;
+            }
+            .file-row h2 {
+                text-align: left;
+                padding-left: 5px;
+                font-family: monospace;
+            }
+            .file-row iframe {
+                border: 0px;
+                width: 100%;
+                height: 200px;
+            }
+        </style>
+    </head>
+    <body>
+        <br/>
+        <center>
+            <h1>Upload to B2</h1>
+            <input type="file" id="drop" accept="image/png, image/jpeg" multiple/>
+        </center>
+        <h2>Files List</h2>
+        <hr/>
+        <div id="files"></div>
+
+        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+        <script type="text/javascript">
+            const fileList = document.getElementById('files')
+            const onSelectFile = async (event) => {
+                for (const file of event.target.files) {
+                    // get a File blob object from the source <input type="file">
+                    const [
+                        uploadUrlAuth, headers,
+                    ] = await Promise.all([
+                        getUploadUrl(), getFileHeaders(file),
+                    ])
+
+                    const res = await uploadFileB2(
+                        uploadUrlAuth,
+                        file,
+                        headers,
+                        ({loaded, total}) => {
+                            const pct = parseInt((loaded / total) * 100)
+                            console.log('Uploading...', `${pct}%`)
+                        },
+                    )
+                    const publicUrl = getPublicFileUrl(res.fileName)
+                    const new_row = document.createElement('a')
+                    new_row.href = publicUrl
+                    new_row.classList.add('file-row')
+                    new_row.innerHTML = `<iframe src="${publicUrl}"></iframe><h2 title="${res.fileId.slice(0,32)}">${file.name}</h2>`
+                    fileList.appendChild(new_row)
+                }
+            }
+
+            // const loadFiles = async (event) => {
+            //     const res = await axios.get(
+            //         'https://apiNNN.backblazeb2.com/b2api/v2/b2_list_file_names',
+            //         {bucketId: BUCKET_ID},
+            //     )
+            // }
+
+            const input = document.getElementById('drop')
+            input.addEventListener('change', onSelectFile)
+
+            // API Call Helpers
+
+            const PUBLIC_BUCKET_URL = 'https://backblaze.zervice.io/file/zervice-backblaze'
+            const SERVER_HOST = ''  // or e.g. 'http://localhost:8085'
+            const SERVER_ROUTES = {
+                b2_get_upload_url:      SERVER_HOST + '/b2/get_upload_url',
+                b2_delete_file_version: SERVER_HOST + '/b2/delete_file_version',
+            }
+
+            // Ask the backend to fetch a new onetime upload URL from B2
+            const getUploadUrl = async () =>                           // await -> {uploadUrl, authorizationToken, bucketId}
+                (await axios.post(SERVER_ROUTES.b2_get_upload_url)).data
+
+            // Ask the backend to delete a given fileId,fileName from B2
+            const deleteFileVersion = async (fileId, fileName) =>        // await -> {bucketId, fileId, fileName}
+                (await axios.post(SERVER_ROUTES.b2_delete_file_version)).data
+
+
+            // Upload a file blob to B2 using a given upload_url and headers
+            const uploadFileB2 = async (uploadUrlAuth, file, headers, onUploadProgress) =>     // await -> {fileId, action: 'upload', uploadTimestamp, ...}
+                (await axios.post(
+                    uploadUrlAuth.uploadUrl,
+                    file, {
+                    headers: {
+                        'Authorization': uploadUrlAuth.authorizationToken,
+                        ...headers,
+                    },
+                    onUploadProgress,
+                })).data
+            
+
+            // Helpers
+
+
+            // Read a File blob's contents as an ArrayBuffer
+            const getFileContents = (file) =>                    // await -> ArrayBuffer
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader() 
+                    reader.onload = (event) => resolve(event.target.result)
+                    reader.readAsArrayBuffer(file)
+                })
+
+            // Get the SHA1 hash of an ArrayBuffer in hex digest str form
+            const getFileHash = async (arrayBuffer) => {         // await -> '...sha1hexdigest...'
+                const hashBuffer = await window.crypto.subtle.digest('SHA-1', arrayBuffer)
+                const hashArray = Array.from(new Uint8Array(hashBuffer))
+                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+                return hashHex
+            }
+
+            // Get the headers that will be used for b2_upload_file
+            const getFileHeaders = async (file) => {           // await -> {...headers...}
+                const content = await getFileContents(file)
+                const sha1hash = await getFileHash(content)
+                const ext = file.name.split('.').slice(-1)[0].toLowerCase()
+
+                return {
+                    'X-Bz-File-Name': encodeURIComponent(`${sha1hash}.${ext}`),
+                    'X-Bz-Content-Sha1': sha1hash,
+                    'Content-Type': file.type,
+                    ...getCustomHeaders(file),
+                }
+            }
+
+            // Header overrides go here
+            const getCustomHeaders = async (file) => ({           // await -> {...headers...}
+                // 'Content-Type': e.g. file.type, 'b2/x-auto', 'application/octet-stream'
+                // 'X-Bz-File-Name': e.g. encodeURIComponent(file.name),
+                // 'X-Bz-Content-Sha1': e.g. 'do_not_verify',
+                // 'X-Bz-Info-b2-content-type': e.g. file.type, 'application/octet-stream', etc.
+                // 'X-Bz-Info-b2-cache-control': e.g. encodeURIComponent('max-age=3600'),
+                // 'X-Bz-Info-original-name': e.g. encodeURIComponent(file.name) -->
+            })
+
+            const getPublicFileUrl = (filename) => `${PUBLIC_BUCKET_URL}/${filename}`
+        </script>
+    </body>
+</html>

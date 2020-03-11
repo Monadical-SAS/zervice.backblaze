@@ -1,0 +1,20 @@
+{
+  "name": "zervice.backblaze",
+  "version": "1.0.0",
+  "description": "Browser dropbox to upload files to BackBlaze with optional CloudFlare egress.",
+  "main": "server.js",
+  "repository": "https://github.com/Monadical-SAS/zervice.backblaze.git",
+  "author": "Nick Sweeting",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "backblaze-b2": "^1.5.0",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1"
+  },
+  "scripts": {
+    "server": "./server.js",
+    "start": "./server.js",
+    "run": "./server.js"
+  }
+}
